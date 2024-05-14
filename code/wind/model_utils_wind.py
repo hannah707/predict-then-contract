@@ -257,11 +257,11 @@ def train_models(models, train_loader, use_forecast=False, \
                     save_from = epoch+1
 
         if val_loader is not None:
-            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,use_forecast=use_forecast,model_type=model_type, path=ckpt_path)
+            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path)
             val_losses.append(val_acc)
             val_objs.append(val_regret)
 
-            best_loss, best_loss_actual, es_counter, continue_training = save_models(models=models,tasks=tasks,val_acc=val_acc,val_regret=val_regret, best_loss=best_loss,best_loss_actual=best_loss_actual,patience=patience,patience_alpha=patience_alpha,epoch=epoch,counter=es_counter, continue_training=continue_training,model_key=model_key,val_method=val_method,use_forecast=use_forecast, path=ckpt_path)
+            best_loss, best_loss_actual, es_counter, continue_training = save_models(models=models,tasks=tasks,val_acc=val_acc,val_regret=val_regret, best_loss=best_loss,best_loss_actual=best_loss_actual,patience=patience,patience_alpha=patience_alpha,epoch=epoch,counter=es_counter, continue_training=continue_training,model_key=model_key,val_method=val_method,use_forecast=use_forecast, ckpt_path=ckpt_path)
 
             print(f'Epoch {epoch}/{num_epochs}: training loss={np.array(train_losses[-1]).round(3)}, regret = {train_regret:.3f}; validation loss={np.array(val_losses[-1]).round(3)}, regret = {val_regret:.3f}.')
 
@@ -285,7 +285,7 @@ def train_models(models, train_loader, use_forecast=False, \
     print("=============================================================")
 
     if test_loader is not None:
-        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust,use_forecast=use_forecast,model_type=model_type, path=ckpt_path)
+        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path)
         print(f'The training of Model:{model_key} is finished at epoch {epoch+1}. Test accuracy = {np.array(test_loss_acc).round(3)}, overall regret = {test_regret:.3f}.')
 
     if save_prog:

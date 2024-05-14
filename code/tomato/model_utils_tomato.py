@@ -1,11 +1,9 @@
-#%%
 import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 from regret_utils import *
 from model_utils_eval import *
@@ -217,8 +215,7 @@ def train_models(models, train_loader,\
                     optimizerP = optim.SGD(models[0].parameters(), lr=lr/lr_decay, weight_decay=1e-5)
                     optimizerY = optim.SGD(models[1].parameters(), lr=lr/lr_decay, weight_decay=1e-5)
                     for (ii,task),model in zip(enumerate(tasks),models):
-                        if not (ii==1 and use_forecast):
-                            torch.save(model.state_dict(), f'{ckpt_path}/best-model-before-switch_{task}_{model_key}.pth')
+                        torch.save(model.state_dict(), f'{ckpt_path}/best-model-before-switch_{task}_{model_key}.pth')
                     print('backward loss switched.')
                     if save_after_switch:
                         save_from = epoch+1
@@ -240,17 +237,16 @@ def train_models(models, train_loader,\
                 optimizerP = optim.SGD(models[0].parameters(), lr=lr/lr_decay, weight_decay=1e-5)
                 optimizerY = optim.SGD(models[1].parameters(), lr=lr/lr_decay, weight_decay=1e-5)
                 for (ii,task),model in zip(enumerate(tasks),models):
-                    if not (ii==1 and use_forecast):
-                        torch.save(model.state_dict(), f'{ckpt_path}/best-model-before-switch_{task}_{model_key}.pth')
+                    torch.save(model.state_dict(), f'{ckpt_path}/best-model-before-switch_{task}_{model_key}.pth')
                 if save_after_switch:
                     save_from = epoch+1
 
         if val_loader is not None:
-            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,model_type=model_type, path=ckpt_path)
+            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,model_type=model_type, ckpt_path=ckpt_path)
             val_losses.append(val_acc)
             val_objs.append(val_regret)
 
-            best_loss, best_loss_actual, es_counter, continue_training = save_models(models=models,tasks=tasks,val_acc=val_acc,val_regret=val_regret, best_loss=best_loss,best_loss_actual=best_loss_actual,patience=patience,patience_alpha=patience_alpha,epoch=epoch,counter=es_counter, continue_training=continue_training,model_key=model_key,val_method=val_method,path=ckpt_path)
+            best_loss, best_loss_actual, es_counter, continue_training = save_models(models=models,tasks=tasks,val_acc=val_acc,val_regret=val_regret, best_loss=best_loss,best_loss_actual=best_loss_actual,patience=patience,patience_alpha=patience_alpha,epoch=epoch,counter=es_counter, continue_training=continue_training,model_key=model_key,val_method=val_method, ckpt_path=ckpt_path)
 
             print(f'Epoch {epoch}/{num_epochs}: training loss={np.array(train_losses[-1]).round(3)}, regret = {train_regret:.3f}; validation loss={np.array(val_losses[-1]).round(3)}, regret = {val_regret:.3f}.')
 
@@ -273,7 +269,7 @@ def train_models(models, train_loader,\
     print("=============================================================")
 
     if test_loader is not None:
-        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust, model_type=model_type, path=ckpt_path)
+        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust, model_type=model_type, ckpt_path=ckpt_path)
         print(f'The training of Model:{model_key} is finished at epoch {epoch+1}. Test accuracy = {np.array(test_loss_acc).round(3)}, overall regret = {test_regret:.3f}.')
     
     if save_prog:
