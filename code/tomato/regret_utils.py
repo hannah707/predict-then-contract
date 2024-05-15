@@ -1,14 +1,6 @@
-#%%
 import numpy as np
 
 import torch
-# from torch.utils.data import Dataset, DataLoader
-# from torch.utils.data.dataset import random_split
-
-import torch.nn as nn
-# import torch.optim as optim
-# import torch.nn.functional as F
-
 # import tqdm
 import cvxpy as cp
 from cvxpylayers.torch import CvxpyLayer
@@ -73,44 +65,8 @@ assert problem.is_dpp(), 'The problem is not DPP-compliant.'
 
 clayer = CvxpyLayer(problem, parameters=[pc_para, pr_para, yl_para, pc2_para, pr2_para, pcy_para, pry_para], variables=[decision_var])
 
-#%%
-def calculate_profit_tensor(decision,pc,_pr,_yl):
-    decision,pc,_pr,_yl = [torch.tensor(item).to(device) if not isinstance(item, torch.Tensor) else item for item in [decision,pc,_pr,_yl]]
-    dl = al*_pr+bl
-    dc = ac*pc+bc
 
-    sell_by_contract = torch.clamp(torch.min(torch.min(dc,_yl),decision),min=0)
-    sell_at_market = torch.clamp(torch.min(_yl-sell_by_contract, dl),min=0)
-    over_production = torch.clamp(_yl-sell_by_contract-sell_at_market,min=0)
-
-    c1 = ap*_yl+bp
-    c2 = p0*torch.clamp(decision-_yl,min=0) + \
-        p1*torch.clamp(decision-dc,min=0) + \
-        p2*over_production   
-
-    obj = pc*sell_by_contract + _pr*sell_at_market - c1 - c2
-
-    return obj
-
-def calculate_profit(decision,pc,_pr,_yl):
-    decision,pc,_pr,_yl = [item.item() if isinstance(item, torch.Tensor) else item for item in [decision,pc,_pr,_yl]]
-    dl = al*_pr+bl
-    dc = ac*pc+bc
-        
-    sell_by_contract = np.max(np.min([dc,_yl,decision]),0)
-    sell_at_market = np.max(np.min([_yl-sell_by_contract, dl]),0)
-    # sell_at_market_ = np.min([_yl-decision, dl])
-    over_production = np.max([_yl-sell_by_contract-sell_at_market, 0])
-    
-    c1 = ap*(_yl)+bp
-    c2 = p0*np.max([0, decision-_yl]) + p1*np.max([0, decision-dc]) + p2*over_production
-
-    profit = pc*sell_by_contract + _pr*sell_at_market - c1 - c2
-
-    return profit
-
-
-def Q_loss(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_rmse=0, yl_rmse=yl_rmse, robust=False, spec=False):
+def Q_loss(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_rmse=0, yl_rmse=yl_rmse, robust=False, spec=False, debug_regret=False):
     Q_loss_batch = None
     errored_decision = 0
     Q_losses = []
@@ -129,21 +85,24 @@ def Q_loss(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_
             profit_x_sol = calculate_profit_tensor(x_sol, pc, pr, yl)
         except diffcp.cone_program.SolverError as e:
             se=True
-            print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
+            if debug_regret:
+                print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
             x_sol = torch.tensor([0.0]).to(torch.float32).to(device)
             profit_x_sol = calculate_profit_tensor(x_sol, pc, pr, yl)
         except AssertionError as e:
             se=True
-            print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
+            if debug_regret:
+                print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
             x_sol = torch.tensor([0.0]).to(torch.float32).to(device)
             profit_x_sol = calculate_profit_tensor(x_sol, pc, pr, yl)
 
-        Q_loss = profit_x_opt - profit_x_sol
+        Q_loss = torch.sub(profit_x_opt, profit_x_sol)
         Q_losses.append(Q_loss.item())
 
         if se:
             errored_decision += 1
-            print(f'SolverError. So we skipped {errored_decision} decision. So far we have skipped') 
+            if debug_regret:
+                print(f'SolverError. So far we have skipped we skipped {errored_decision} decision(s).') 
         
         if Q_loss_batch is None:
             Q_loss_batch = Q_loss
@@ -155,7 +114,7 @@ def Q_loss(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_
     else:
         return Q_loss_batch, errored_decision
 
-def Q_loss_spoplus(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_rmse=0, yl_rmse=yl_rmse, robust=False, spec=False):
+def Q_loss_spoplus(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rmse=0, pr_rmse=0, yl_rmse=yl_rmse, robust=False, spec=False, debug_regret=False):
     Q_loss_batch = None
     errored_decision = 0
     Q_losses = []
@@ -177,12 +136,14 @@ def Q_loss_spoplus(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rms
             profit_x_support = calculate_profit_tensor(x_support, pc, pr-2*_pr, _yl)
         except diffcp.cone_program.SolverError as e:
             se=True
-            print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
+            if debug_regret:
+                print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
             x_sol = torch.tensor([0.0]).to(torch.float32).to(device)
             profit_x_support = calculate_profit_tensor(x_sol, pc, pr, yl)
         except AssertionError as e:
             se=True
-            print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
+            if debug_regret:
+                print("Raise Error:", e, "when using values:", [i.detach().cpu().numpy() for i in [pc, _pr, _yl, pc, pr, yl]])
             x_sol = torch.tensor([0.0]).to(torch.float32).to(device)
             profit_x_support = calculate_profit_tensor(x_sol, pc, pr, yl)
 
@@ -191,14 +152,49 @@ def Q_loss_spoplus(realtime_price, yield_pred, pcReal, prReal, yieldReal, pc_rms
 
         if se:
             errored_decision += 1
-            print(f'SolverError. So we skipped {errored_decision} decision. So far we have skipped') 
+            if debug_regret:
+                print(f'SolverError. So far we have skipped we skipped {errored_decision} decision(s).')  
         
         if Q_loss_batch is None:
             Q_loss_batch = Q_loss
         else:
-            Q_loss_batch += Q_loss
+            Q_loss_batch = torch.add(Q_loss_batch, Q_loss)
 
     if spec:
         return Q_loss_batch, Q_losses, errored_decision
     else:
         return Q_loss_batch, errored_decision
+
+
+def calculate_profit_tensor(decision,pc,_pr,_yl):
+    decision,pc,_pr,_yl = [torch.tensor(item).to(device) if not isinstance(item, torch.Tensor) else item for item in [decision,pc,_pr,_yl]]
+    dl = torch.add(torch.mul(al,_pr),bl)
+    dc = torch.add(torch.mul(ac,pc),bc)
+
+    sell_by_contract = torch.clamp(torch.min(torch.min(dc,_yl),decision),min=0)
+    sell_at_market = torch.clamp(torch.min(torch.sub(_yl,sell_by_contract), dl),min=0)
+    over_production = torch.clamp(torch.sub(torch.sub(_yl,sell_by_contract),sell_at_market),min=0)
+
+    c1 = torch.add(torch.mul(ap,_yl),bp)
+    c2 = torch.add(torch.add(torch.mul(p0,torch.clamp(torch.sub(decision,_yl),min=0)), torch.mul(p1,torch.clamp(torch.sub(decision,dc),min=0))), torch.mul(p2,over_production))
+
+    obj = torch.sub(torch.sub(torch.add(torch.mul(pc,sell_by_contract), torch.mul(_pr,sell_at_market)),c1),c2)
+
+    return obj.detach()
+
+def calculate_profit(decision,pc,_pr,_yl):
+    decision,pc,_pr,_yl = [item.item() if isinstance(item, torch.Tensor) else item for item in [decision,pc,_pr,_yl]]
+    dl = al*_pr+bl
+    dc = ac*pc+bc
+        
+    sell_by_contract = np.max(np.min([dc,_yl,decision]),0)
+    sell_at_market = np.max(np.min([_yl-sell_by_contract, dl]),0)
+    # sell_at_market_ = np.min([_yl-decision, dl])
+    over_production = np.max([_yl-sell_by_contract-sell_at_market, 0])
+    
+    c1 = ap*(_yl)+bp
+    c2 = p0*np.max([0, decision-_yl]) + p1*np.max([0, decision-dc]) + p2*over_production
+
+    profit = pc*sell_by_contract + _pr*sell_at_market - c1 - c2
+
+    return profit

@@ -26,7 +26,7 @@ class BiasedLoss(nn.Module):
 loss_fn = nn.MSELoss()
 
 
-def test_model(models,tasks,data_loader,count_q,model_key,model_type='mlp',load_bbm=False, ckpt_path='saved_models', robust=False, yield_bias=False, w_neg=1, w_pos=1):
+def test_model(models,tasks,data_loader,count_q,model_key,model_type='mlp',load_bbm=False, ckpt_path='saved_models', robust=False, yield_bias=False, w_neg=1, w_pos=1, debug_regret=False):
     if yield_bias:
         assert w_neg!=w_pos
         loss_b = BiasedLoss(w_neg=w_neg, w_pos=w_pos)
@@ -66,7 +66,7 @@ def test_model(models,tasks,data_loader,count_q,model_key,model_type='mlp',load_
                 # [daPrice, rtPrice] = preds
                 [prPred, yieldPred] = preds
 
-                Q_loss_batch, _ = Q_loss(prPred, yieldPred, pcReal, prReal, yieldReal, robust=robust)
+                Q_loss_batch, _ = Q_loss(prPred, yieldPred, pcReal, prReal, yieldReal, robust=robust, debug_regret=debug_regret)
                 total_regret +=  Q_loss_batch.item()
 
     return loss_acc, total_regret
@@ -87,7 +87,7 @@ def save_models(models,tasks,val_acc,val_regret, best_loss, best_loss_actual,pat
                     torch.save(model.state_dict(), f'{ckpt_path}/best-best-model_{task}_{model_key}.pth')
         else:
             counter += 1
-            print('ES STATUS:', epoch,counter, '/', patience)
+            print(f'Early-stopping counts: {counter}/{patience}')
             if counter >= patience:
                 print(f'Validation regret did not improve for {patience} epochs. Stopping early at {epoch}.')
                 continue_training = [False]*len(tasks)
@@ -105,7 +105,7 @@ def save_models(models,tasks,val_acc,val_regret, best_loss, best_loss_actual,pat
                         torch.save(model.state_dict(), f'{ckpt_path}/best-best-model_{task}_{model_key}.pth')
                 else:
                     counter[ii]+=1
-                    print('ES STATUS:', epoch,ii,counter,'/',patience)
+                    print(f'Early-stopping counts: model-{ii}: {counter[ii]}/{patience}')
                     if counter[ii] >= patience:
                         print(f'Validation loss did not improve for {patience} epochs for {task}. Stopping early at {epoch}.')
                         continue_training[ii] = False
@@ -132,7 +132,7 @@ def save_training_summary(train_losses, train_objs, val_losses, val_objs, model_
     plt.tight_layout()
 
 
-def test_model_me(models,tasks,data_loader,count_q,model_key,model_type='mlp',load_bbm=True, ckpt_path='saved_models', robust=False):
+def test_model_me(models,tasks,data_loader,count_q,model_key,model_type='mlp',load_bbm=True, ckpt_path='saved_models', robust=False, debug_regret=False):
     for model in models:
         model.eval()
 
@@ -192,7 +192,7 @@ def test_model_me(models,tasks,data_loader,count_q,model_key,model_type='mlp',lo
                 # [daPrice, rtPrice] = preds
                 [prPred, yieldPred] = preds
 
-                Q_loss_batch, _ = Q_loss(prPred, yieldPred, pcReal, prReal, yieldReal, robust=robust)
+                Q_loss_batch, _ = Q_loss(prPred, yieldPred, pcReal, prReal, yieldReal, robust=robust, debug_regret=debug_regret)
                 total_regret +=  Q_loss_batch.item()
 
     return loss_acc, total_regret

@@ -1,4 +1,3 @@
-#%%
 import numpy as np
 
 import torch
@@ -25,13 +24,13 @@ def loss_weights(REG):
 
     return w11,w12,w21,w22
 
-def loss_adding(l1, l2):
-    l1_ = l1.detach().clone()+l2.detach().clone()
-    l1_.requires_grad = True
-    return l1_
+# def loss_adding(l1, l2):
+#     l1_ = l1.detach().clone()+l2.detach().clone()
+#     l1_.requires_grad = True
+#     return l1_
 
 def train_models(models, train_loader, use_forecast=False, \
-                    tasks=['realtime-Price','yield'], REG=[0,0], spoplus=False, robust=False, \
+                    tasks=['realtime-Price','yield'], REG=[0,0], spoplus=False, robust=False, debug_regret=False, \
                     val_loader=None, val_method='acc', test_loader=None, \
                     num_epochs=10, lr=0.0001, lr_decay=1, patience=2, patience_alpha=1, \
                     switch_patience=0, switch_by_patience=True, single_warm_up='', save_after_switch=False, \
@@ -169,9 +168,9 @@ def train_models(models, train_loader, use_forecast=False, \
 
             if count_q:
                 if use_forecast:
-                    Q_loss_batch, errored_decision = Q_loss(rpPred, yieldForecast, dpReal, rpReal, yieldReal, robust=robust)
+                    Q_loss_batch, errored_decision = Q_loss(rpPred, yieldForecast, dpReal, rpReal, yieldReal, robust=robust, debug_regret=debug_regret)
                 else:
-                    Q_loss_batch, errored_decision = Q_loss(rpPred, yieldPred, dpReal, rpReal, yieldReal, robust=robust)
+                    Q_loss_batch, errored_decision = Q_loss(rpPred, yieldPred, dpReal, rpReal, yieldReal, robust=robust, debug_regret=debug_regret)
 
                 if errored_decision == len(inputs):
                     print('No valid decisions are made for this batch in epoch ', epoch)
@@ -184,11 +183,11 @@ def train_models(models, train_loader, use_forecast=False, \
                         Q_loss_plus_batch, _ = Q_loss_spoplus(rpPred, yieldForecast, dpReal, rpReal, yieldReal)
                     else:
                         Q_loss_plus_batch, _ = Q_loss_spoplus(rpPred, yieldPred, dpReal, rpReal, yieldReal)
-                    lossP = loss_adding(w11*acc_loss[0], w12*Q_loss_plus_batch)
+                    lossP = torch.add(torch.mul(w11,acc_loss[0]), torch.mul(w12,Q_loss_plus_batch))
                 else:
-                    lossP = loss_adding(w11*acc_loss[0], w12*Q_loss_batch)
+                    lossP = torch.add(torch.mul(w11,acc_loss[0]), torch.mul(w12,Q_loss_batch))
                 
-                lossY = loss_adding(w21*acc_loss[1], w22*Q_loss_batch)
+                lossY = torch.add(torch.mul(w21,acc_loss[1]), torch.mul(w22,Q_loss_batch))
             else:
                 lossP, lossY = acc_loss
 
@@ -200,7 +199,8 @@ def train_models(models, train_loader, use_forecast=False, \
                         try:
                             loss.backward(retain_graph=True)
                         except RuntimeError as e:
-                            print("Raise Error:", e, "when using values:", acc_loss, Q_loss_batch)
+                            # continue
+                            print("Raise Error:", e, "the losses are:", acc_loss, Q_loss)
                         opt.step()
 
         train_losses.append(train_loss_acc)
@@ -257,7 +257,7 @@ def train_models(models, train_loader, use_forecast=False, \
                     save_from = epoch+1
 
         if val_loader is not None:
-            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path)
+            val_acc, val_regret = test_model(models,tasks,val_loader,count_q,model_key,robust=robust,yield_bias=yield_bias,w_neg=w_neg,w_pos=w_pos,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path, debug_regret=debug_regret)
             val_losses.append(val_acc)
             val_objs.append(val_regret)
 
@@ -285,7 +285,7 @@ def train_models(models, train_loader, use_forecast=False, \
     print("=============================================================")
 
     if test_loader is not None:
-        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path)
+        test_loss_acc, test_regret = test_model(models,tasks,test_loader,count_q=True,load_bbm=True, model_key=model_key,robust=robust,use_forecast=use_forecast,model_type=model_type, ckpt_path=ckpt_path, debug_regret=debug_regret)
         print(f'The training of Model:{model_key} is finished at epoch {epoch+1}. Test accuracy = {np.array(test_loss_acc).round(3)}, overall regret = {test_regret:.3f}.')
 
     if save_prog:

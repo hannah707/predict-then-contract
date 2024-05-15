@@ -57,9 +57,9 @@ if __name__ == '__main__':
     parser.add_argument('--reg_yield', type=float, default=0, help='ratio of SPO:MSE for training yield prediction model')
     parser.add_argument('--spoplus', type=str2bool, default=False, help='whether SPO+ loss is used in (price) prediction')
     parser.add_argument('--robust', type=str2bool, default=False, help='whether the decision-making uses robust optimization')
-    parser.add_argument('--val_method', type=str, default='mse', help='validation loss for early stopping, either \'mse\' or \'reg')
+    parser.add_argument('--val_method', type=str, default='acc', help='validation loss for early stopping, either \'mse\' or \'reg')
     parser.add_argument('--lr_decay', type=float, default=1, help='learning rate change after warm up')
-    parser.add_argument('--switch_patience', type=int, default=20, help='epochs of warming up, counted after converging')
+    parser.add_argument('--switch_patience', type=int, default=0, help='epochs of warming up, counted after converging')
     parser.add_argument('--switch_by_patience', type=str2bool, default=True, help='if False, the warm up uses fixed epochs')
     parser.add_argument('--single_warm_up', type=str, default='', help='model name if just one model will be warmed up')
     parser.add_argument('--load_model', type=str, default='', help='keyword of model checkpoints to load')
@@ -74,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--yield_bias', type=str2bool, default=False, help='if yield prediction model is trained with a weighted MSE')
     parser.add_argument('--w_neg', type=float, default=1, help='weight of under-estimation')
     parser.add_argument('--w_pos', type=float, default=1, help='weight of over-estimation')
+    parser.add_argument('--debug_regret', type=str2bool, default=False, help='whether to show errored values for cvxpy')
 
     args = parser.parse_args()
 
@@ -111,15 +112,8 @@ if __name__ == '__main__':
     val_size = int(args.val_ratio * len(dataset))
     test_size = len(dataset) - train_size - val_size
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
-    # if args.sub_train_ratio!=1:
-    #     sub_train_size = int(sub_train_ratio * train_size)
-    #     non_train_size = train_size - sub_train_size
-    #     train_dataset, non_train_dataset = random_split(train_dataset, [sub_train_size, non_train_size])
-    #     sub_val_size = int(sub_train_ratio * val_size)
-    #     non_val_size = val_size - sub_val_size
-    #     val_dataset, non_val_dataset = random_split(val_dataset, [sub_val_size, non_val_size])
-
     print('Train-val-test:', len(train_dataset), len(val_dataset), len(test_dataset))
+    
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, worker_init_fn=worker_init_fn)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, worker_init_fn=worker_init_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, worker_init_fn=worker_init_fn)
@@ -128,10 +122,10 @@ if __name__ == '__main__':
 
     REG = [i if i < 1000 else np.inf for i in [args.reg_price, args.reg_yield]]
 
-    model_p = mlpRegressor1(input_dim, args.hidden_dim1, args.hidden_dim2, output_dim=1)
+    model_p = mlpRegressor3(input_dim, args.hidden_dim1, args.hidden_dim2, output_dim=1)
     model_p.to(device)
 
-    model_y = mlpRegressor1(input_dim, args.hidden_dim1, args.hidden_dim2, output_dim=1)
+    model_y = mlpRegressor3(input_dim, args.hidden_dim1, args.hidden_dim2, output_dim=1)
     model_y.to(device)
 
     if len(args.load_model)>0:
